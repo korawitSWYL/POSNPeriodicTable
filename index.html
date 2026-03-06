@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POSN Chemistry Pro</title>
+    
+    <!-- Tailwind CSS สำหรับจัดการความสวยงาม -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM สำหรับการทำงานของแอพ -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel สำหรับแปลงโค้ด JSX ให้เบราว์เซอร์เข้าใจ -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #c7c7cc; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
+        
+        @keyframes orbit { 
+            from { transform: rotate(0deg); } 
+            to { transform: rotate(360deg); } 
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- ICON COMPONENTS (แทนที่ Lucide React เพื่อให้อยู่ในไฟล์เดียวได้) ---
+        const IconBase = ({ children, className = "w-5 h-5" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {children}
+            </svg>
+        );
+        const X = (p) => <IconBase {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></IconBase>;
+        const Activity = (p) => <IconBase {...p}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></IconBase>;
+        const Atom = (p) => <IconBase {...p}><circle cx="12" cy="12" r="1"/><path d="M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5Z"/><path d="M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5Z"/></IconBase>;
+        const LayoutGrid = (p) => <IconBase {...p}><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></IconBase>;
+        const BookOpen = (p) => <IconBase {...p}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></IconBase>;
+        const ChevronRight = (p) => <IconBase {...p}><path d="m9 18 6-6-6-6"/></IconBase>;
+        const ChevronLeft = (p) => <IconBase {...p}><path d="m15 18-6-6 6-6"/></IconBase>;
+        const CheckCircle2 = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></IconBase>;
+        const Play = (p) => <IconBase {...p}><polygon points="5 3 19 12 5 21 5 3"/></IconBase>;
+        const RotateCcw = (p) => <IconBase {...p}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></IconBase>;
+        const Info = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></IconBase>;
+
+        // --- DATA: ครบ 118 ธาตุ ---
+        const rawData = [
+            "1,H,Hydrogen,ไฮโดรเจน,1.008,1,1,nonmetal,1,2.20,1312,53,1s1",
+            "2,He,Helium,ฮีเลียม,4.0026,18,1,noble,2,-,2372,31,1s2",
+            "3,Li,Lithium,ลิเทียม,6.94,1,2,alkali,2|1,0.98,520,167,[He] 2s1",
+            "4,Be,Beryllium,เบริลเลียม,9.0122,2,2,alkaline,2|2,1.57,899,112,[He] 2s2",
+            "5,B,Boron,โบรอน,10.81,13,2,metalloid,2|3,2.04,801,87,[He] 2s2 2p1",
+            "6,C,Carbon,คาร์บอน,12.011,14,2,nonmetal,2|4,2.55,1086,67,[He] 2s2 2p2",
+            "7,N,Nitrogen,ไนโตรเจน,14.007,15,2,nonmetal,2|5,3.04,1402,56,[He] 2s2 2p3",
+            "8,O,Oxygen,ออกซิเจน,15.999,16,2,nonmetal,2|6,3.44,1314,48,[He] 2s2 2p4",
+            "9,F,Fluorine,ฟลูออรีน,18.998,17,2,halogen,2|7,3.98,1681,42,[He] 2s2 2p5",
+            "10,Ne,Neon,นีออน,20.180,18,2,noble,2|8,-,2081,38,[He] 2s2 2p6",
+            "11,Na,Sodium,โซเดียม,22.990,1,3,alkali,2|8|1,0.93,496,190,[Ne] 3s1",
+            "12,Mg,Magnesium,แมกนีเซียม,24.305,2,3,alkaline,2|8|2,1.31,738,145,[Ne] 3s2",
+            "13,Al,Aluminum,อะลูมิเนียม,26.982,13,3,post-transition,2|8|3,1.61,578,118,[Ne] 3s2 3p1",
+            "14,Si,Silicon,ซิลิกอน,28.085,14,3,metalloid,2|8|4,1.90,786,111,[Ne] 3s2 3p2",
+            "15,P,Phosphorus,ฟอสฟอรัส,30.974,15,3,nonmetal,2|8|5,2.19,1012,98,[Ne] 3s2 3p3",
+            "16,S,Sulfur,กำมะถัน,32.06,16,3,nonmetal,2|8|6,2.58,1000,88,[Ne] 3s2 3p4",
+            "17,Cl,Chlorine,คลอรีน,35.45,17,3,halogen,2|8|7,3.16,1251,79,[Ne] 3s2 3p5",
+            "18,Ar,Argon,อาร์กอน,39.95,18,3,noble,2|8|8,-,1521,71,[Ne] 3s2 3p6",
+            "19,K,Potassium,โพแทสเซียม,39.098,1,4,alkali,2|8|8|1,0.82,419,243,[Ar] 4s1",
+            "20,Ca,Calcium,แคลเซียม,40.078,2,4,alkaline,2|8|8|2,1.00,590,194,[Ar] 4s2",
+            "21,Sc,Scandium,สแคนเดียม,44.956,3,4,transition,2|8|9|2,1.36,633,184,[Ar] 4s2 3d1",
+            "22,Ti,Titanium,ไทเทเนียม,47.867,4,4,transition,2|8|10|2,1.54,659,176,[Ar] 4s2 3d2",
+            "23,V,Vanadium,วาเนเดียม,50.942,5,4,transition,2|8|11|2,1.63,651,171,[Ar] 4s2 3d3",
+            "24,Cr,Chromium,โครเมียม,51.996,6,4,transition,2|8|13|1,1.66,653,166,[Ar] 4s1 3d5",
+            "25,Mn,Manganese,แมงกานีส,54.938,7,4,transition,2|8|13|2,1.55,717,161,[Ar] 4s2 3d5",
+            "26,Fe,Iron,เหล็ก,55.845,8,4,transition,2|8|14|2,1.83,763,156,[Ar] 4s2 3d6",
+            "27,Co,Cobalt,โคบอลต์,58.933,9,4,transition,2|8|15|2,1.88,760,152,[Ar] 4s2 3d7",
+            "28,Ni,Nickel,นิกเกิล,58.693,10,4,transition,2|8|16|2,1.91,737,149,[Ar] 4s2 3d8",
+            "29,Cu,Copper,ทองแดง,63.546,11,4,transition,2|8|18|1,1.90,746,145,[Ar] 4s1 3d10",
+            "30,Zn,Zinc,สังกะสี,65.38,12,4,transition,2|8|18|2,1.65,906,142,[Ar] 4s2 3d10",
+            "31,Ga,Gallium,แกลเลียม,69.723,13,4,post-transition,2|8|18|3,1.81,579,136,[Ar] 4s2 3d10 4p1",
+            "32,Ge,Germanium,เจอร์เมเนียม,72.630,14,4,metalloid,2|8|18|4,2.01,762,125,[Ar] 4s2 3d10 4p2",
+            "33,As,Arsenic,อาร์เซนิก,74.922,15,4,metalloid,2|8|18|5,2.18,947,114,[Ar] 4s2 3d10 4p3",
+            "34,Se,Selenium,ซีลีเนียม,78.971,16,4,nonmetal,2|8|18|6,2.55,941,103,[Ar] 4s2 3d10 4p4",
+            "35,Br,Bromine,โบรมีน,79.904,17,4,halogen,2|8|18|7,2.96,1140,94,[Ar] 4s2 3d10 4p5",
+            "36,Kr,Krypton,คริปทอน,83.798,18,4,noble,2|8|18|8,3.00,1351,88,[Ar] 4s2 3d10 4p6",
+            "37,Rb,Rubidium,รูบิเดียม,85.468,1,5,alkali,2|8|18|8|1,0.82,403,253,[Kr] 5s1",
+            "38,Sr,Strontium,สตรอนเชียม,87.62,2,5,alkaline,2|8|18|8|2,0.95,550,219,[Kr] 5s2",
+            "39,Y,Yttrium,อิตเทรียม,88.906,3,5,transition,2|8|18|9|2,1.22,600,212,[Kr] 5s2 4d1",
+            "40,Zr,Zirconium,เซอร์โคเนียม,91.224,4,5,transition,2|8|18|10|2,1.33,640,206,[Kr] 5s2 4d2",
+            "41,Nb,Niobium,ไนโอเบียม,92.906,5,5,transition,2|8|18|12|1,1.6,652,198,[Kr] 5s1 4d4",
+            "42,Mo,Molybdenum,โมลิบดีนัม,95.95,6,5,transition,2|8|18|13|1,2.16,684,190,[Kr] 5s1 4d5",
+            "43,Tc,Technetium,เทคนีเทียม,98,7,5,transition,2|8|18|13|2,1.9,692,183,[Kr] 5s2 4d5",
+            "44,Ru,Ruthenium,รูทีเนียม,101.07,8,5,transition,2|8|18|15|1,2.2,710,178,[Kr] 5s1 4d7",
+            "45,Rh,Rhodium,โรเดียม,102.91,9,5,transition,2|8|18|16|1,2.28,720,173,[Kr] 5s1 4d8",
+            "46,Pd,Palladium,พัลลาเดียม,106.42,10,5,transition,2|8|18|18|0,2.2,804,169,[Kr] 4d10",
+            "47,Ag,Silver,เงิน,107.87,11,5,transition,2|8|18|18|1,1.93,731,165,[Kr] 5s1 4d10",
+            "48,Cd,Cadmium,แคดเมียม,112.41,12,5,transition,2|8|18|18|2,1.69,868,161,[Kr] 5s2 4d10",
+            "49,In,Indium,อินเดียม,114.82,13,5,post-transition,2|8|18|18|3,1.78,558,156,[Kr] 5s2 4d10 5p1",
+            "50,Sn,Tin,ดีบุก,118.71,14,5,post-transition,2|8|18|18|4,1.96,709,145,[Kr] 5s2 4d10 5p2",
+            "51,Sb,Antimony,แอนติโมนี,121.76,15,5,metalloid,2|8|18|18|5,2.05,834,133,[Kr] 5s2 4d10 5p3",
+            "52,Te,Tellurium,เทลลูเรียม,127.6,16,5,metalloid,2|8|18|18|6,2.1,869,123,[Kr] 5s2 4d10 5p4",
+            "53,I,Iodine,ไอโอดีน,126.9,17,5,halogen,2|8|18|18|7,2.66,1008,115,[Kr] 5s2 4d10 5p5",
+            "54,Xe,Xenon,ซีนอน,131.29,18,5,noble,2|8|18|18|8,2.6,1170,108,[Kr] 5s2 4d10 5p6",
+            "55,Cs,Cesium,ซีเซียม,132.91,1,6,alkali,2|8|18|18|8|1,0.79,376,265,[Xe] 6s1",
+            "56,Ba,Barium,แบเรียม,137.33,2,6,alkaline,2|8|18|18|8|2,0.89,503,222,[Xe] 6s2",
+            "57,La,Lanthanum,แลนทานัม,138.91,3,6,lanthanide,2|8|18|18|9|2,1.1,538,195,[Xe] 6s2 5d1",
+            "58,Ce,Cerium,ซีเรียม,140.12,3,6,lanthanide,2|8|18|19|9|2,1.12,534,185,[Xe] 6s2 4f1 5d1",
+            "59,Pr,Praseodymium,เพรซีโอดิเมียม,140.91,3,6,lanthanide,2|8|18|21|8|2,1.13,527,182,[Xe] 6s2 4f3",
+            "60,Nd,Neodymium,นีโอดิเมียม,144.24,3,6,lanthanide,2|8|18|22|8|2,1.14,533,181,[Xe] 6s2 4f4",
+            "61,Pm,Promethium,โพรมีเทียม,145,3,6,lanthanide,2|8|18|23|8|2,1.13,540,183,[Xe] 6s2 4f5",
+            "62,Sm,Samarium,ซาแมเรียม,150.36,3,6,lanthanide,2|8|18|24|8|2,1.17,545,180,[Xe] 6s2 4f6",
+            "63,Eu,Europium,ยูโรเพียม,151.96,3,6,lanthanide,2|8|18|25|8|2,1.2,547,180,[Xe] 6s2 4f7",
+            "64,Gd,Gadolinium,แกโดลิเนียม,157.25,3,6,lanthanide,2|8|18|25|9|2,1.2,593,180,[Xe] 6s2 4f7 5d1",
+            "65,Tb,Terbium,เทอร์เบียม,158.93,3,6,lanthanide,2|8|18|27|8|2,1.1,566,177,[Xe] 6s2 4f9",
+            "66,Dy,Dysprosium,ดิสโพรเซียม,162.50,3,6,lanthanide,2|8|18|28|8|2,1.22,573,178,[Xe] 6s2 4f10",
+            "67,Ho,Holmium,โฮลเมียม,164.93,3,6,lanthanide,2|8|18|29|8|2,1.23,581,176,[Xe] 6s2 4f11",
+            "68,Er,Erbium,เออร์เบียม,167.26,3,6,lanthanide,2|8|18|30|8|2,1.24,589,176,[Xe] 6s2 4f12",
+            "69,Tm,Thulium,ทูเลียม,168.93,3,6,lanthanide,2|8|18|31|8|2,1.25,597,176,[Xe] 6s2 4f13",
+            "70,Yb,Ytterbium,อิตเทอร์เบียม,173.05,3,6,lanthanide,2|8|18|32|8|2,1.1,603,176,[Xe] 6s2 4f14",
+            "71,Lu,Lutetium,ลูทีเทียม,174.97,3,6,lanthanide,2|8|18|32|9|2,1.27,524,171,[Xe] 6s2 4f14 5d1",
+            "72,Hf,Hafnium,แฮฟเนียม,178.49,4,6,transition,2|8|18|32|10|2,1.3,658,159,[Xe] 6s2 4f14 5d2",
+            "73,Ta,Tantalum,แทนทาลัม,180.95,5,6,transition,2|8|18|32|11|2,1.5,761,146,[Xe] 6s2 4f14 5d3",
+            "74,W,Tungsten,ทังสเตน,183.84,6,6,transition,2|8|18|32|12|2,2.36,770,139,[Xe] 6s2 4f14 5d4",
+            "75,Re,Rhenium,รีเนียม,186.21,7,6,transition,2|8|18|32|13|2,1.9,760,137,[Xe] 6s2 4f14 5d5",
+            "76,Os,Osmium,ออสเมียม,190.23,8,6,transition,2|8|18|32|14|2,2.2,840,135,[Xe] 6s2 4f14 5d6",
+            "77,Ir,Iridium,อิริเดียม,192.22,9,6,transition,2|8|18|32|15|2,2.2,880,136,[Xe] 6s2 4f14 5d7",
+            "78,Pt,Platinum,แพลตินัม,195.08,10,6,transition,2|8|18|32|17|1,2.28,870,139,[Xe] 6s1 4f14 5d9",
+            "79,Au,Gold,ทองคำ,196.97,11,6,transition,2|8|18|32|18|1,2.54,890,144,[Xe] 6s1 4f14 5d10",
+            "80,Hg,Mercury,ปรอท,200.59,12,6,transition,2|8|18|32|18|2,2.0,1007,151,[Xe] 6s2 4f14 5d10",
+            "81,Tl,Thallium,แทลเลียม,204.38,13,6,post-transition,2|8|18|32|18|3,1.62,589,170,[Xe] 6s2 4f14 5d10 6p1",
+            "82,Pb,Lead,ตะกั่ว,207.2,14,6,post-transition,2|8|18|32|18|4,1.87,716,146,[Xe] 6s2 4f14 5d10 6p2",
+            "83,Bi,Bismuth,บิสมัท,208.98,15,6,post-transition,2|8|18|32|18|5,2.02,703,150,[Xe] 6s2 4f14 5d10 6p3",
+            "84,Po,Polonium,พอโลเนียม,209,16,6,metalloid,2|8|18|32|18|6,2.0,812,140,[Xe] 6s2 4f14 5d10 6p4",
+            "85,At,Astatine,แอสทาทีน,210,17,6,halogen,2|8|18|32|18|7,2.2,920,150,[Xe] 6s2 4f14 5d10 6p5",
+            "86,Rn,Radon,เรดอน,222,18,6,noble,2|8|18|32|18|8,2.2,1037,150,[Xe] 6s2 4f14 5d10 6p6",
+            "87,Fr,Francium,แฟรนเซียม,223,1,7,alkali,2|8|18|32|18|8|1,0.7,380,260,[Rn] 7s1",
+            "88,Ra,Radium,เรเดียม,226,2,7,alkaline,2|8|18|32|18|8|2,0.9,509,221,[Rn] 7s2",
+            "89,Ac,Actinium,แอกทิเนียม,227,3,7,actinide,2|8|18|32|18|9|2,1.1,499,215,[Rn] 7s2 6d1",
+            "90,Th,Thorium,ทอเรียม,232.04,3,7,actinide,2|8|18|32|18|10|2,1.3,587,206,[Rn] 7s2 6d2",
+            "91,Pa,Protactinium,โพรแทกทิเนียม,231.04,3,7,actinide,2|8|18|32|20|9|2,1.5,568,200,[Rn] 7s2 5f2 6d1",
+            "92,U,Uranium,ยูเรเนียม,238.03,3,7,actinide,2|8|18|32|21|9|2,1.38,598,196,[Rn] 7s2 5f3 6d1",
+            "93,Np,Neptunium,เนปทูเนียม,237,3,7,actinide,2|8|18|32|22|9|2,1.36,605,190,[Rn] 7s2 5f4 6d1",
+            "94,Pu,Plutonium,พลูโทเนียม,244,3,7,actinide,2|8|18|32|24|8|2,1.28,585,187,[Rn] 7s2 5f6",
+            "95,Am,Americium,อะเมริเซียม,243,3,7,actinide,2|8|18|32|25|8|2,1.13,578,180,[Rn] 7s2 5f7",
+            "96,Cm,Curium,คูเรียม,247,3,7,actinide,2|8|18|32|25|9|2,1.28,581,169,[Rn] 7s2 5f7 6d1",
+            "97,Bk,Berkelium,เบอร์คีเลียม,247,3,7,actinide,2|8|18|32|27|8|2,1.3,601,166,[Rn] 7s2 5f9",
+            "98,Cf,Californium,แคลิฟอร์เนียม,251,3,7,actinide,2|8|18|32|28|8|2,1.3,608,168,[Rn] 7s2 5f10",
+            "99,Es,Einsteinium,ไอน์สไตเนียม,252,3,7,actinide,2|8|18|32|29|8|2,1.3,619,165,[Rn] 7s2 5f11",
+            "100,Fm,Fermium,เฟอร์เมียม,257,3,7,actinide,2|8|18|32|30|8|2,1.3,627,167,[Rn] 7s2 5f12",
+            "101,Md,Mendelevium,เมนดีลีเวียม,258,3,7,actinide,2|8|18|32|31|8|2,1.3,635,173,[Rn] 7s2 5f13",
+            "102,No,Nobelium,โนเบเลียม,259,3,7,actinide,2|8|18|32|32|8|2,1.3,642,176,[Rn] 7s2 5f14",
+            "103,Lr,Lawrencium,ลอว์เรนเซียม,262,3,7,actinide,2|8|18|32|32|8|3,1.3,470,161,[Rn] 7s2 5f14 7p1",
+            "104,Rf,Rutherfordium,รัทเทอร์ฟอร์ดเดียม,267,4,7,transition,2|8|18|32|32|10|2,-,-,150,[Rn] 7s2 5f14 6d2",
+            "105,Db,Dubnium,ดุบเนียม,268,5,7,transition,2|8|18|32|32|11|2,-,-,149,[Rn] 7s2 5f14 6d3",
+            "106,Sg,Seaborgium,ซีบอร์เกียม,269,6,7,transition,2|8|18|32|32|12|2,-,-,143,[Rn] 7s2 5f14 6d4",
+            "107,Bh,Bohrium,บอห์เรียม,270,7,7,transition,2|8|18|32|32|13|2,-,-,141,[Rn] 7s2 5f14 6d5",
+            "108,Hs,Hassium,ฮัสเซียม,277,8,7,transition,2|8|18|32|32|14|2,-,-,134,[Rn] 7s2 5f14 6d6",
+            "109,Mt,Meitnerium,ไมต์เนเรียม,278,9,7,unknown,2|8|18|32|32|15|2,-,-,129,[Rn] 7s2 5f14 6d7",
+            "110,Ds,Darmstadtium,ดาร์มสตัดเทียม,281,10,7,unknown,2|8|18|32|32|16|2,-,-,128,[Rn] 7s2 5f14 6d8",
+            "111,Rg,Roentgenium,เรินต์เกเนียม,282,11,7,unknown,2|8|18|32|32|17|2,-,-,121,[Rn] 7s2 5f14 6d9",
+            "112,Cn,Copernicium,โคเปอร์นิเซียม,285,12,7,unknown,2|8|18|32|32|18|2,-,-,122,[Rn] 7s2 5f14 6d10",
+            "113,Nh,Nihonium,นิโฮเนียม,286,13,7,unknown,2|8|18|32|32|18|3,-,-,136,[Rn] 7s2 5f14 6d10 7p1",
+            "114,Fl,Flerovium,ฟลีโรเวียม,289,14,7,unknown,2|8|18|32|32|18|4,-,-,143,[Rn] 7s2 5f14 6d10 7p2",
+            "115,Mc,Moscovium,มอสโกเวียม,290,15,7,unknown,2|8|18|32|32|18|5,-,-,162,[Rn] 7s2 5f14 6d10 7p3",
+            "116,Lv,Livermorium,ลิเวอร์มอเรียม,293,16,7,unknown,2|8|18|32|32|18|6,-,-,175,[Rn] 7s2 5f14 6d10 7p4",
+            "117,Ts,Tennessine,เทนเนสซีน,294,17,7,unknown,2|8|18|32|32|18|7,-,-,165,[Rn] 7s2 5f14 6d10 7p5",
+            "118,Og,Oganesson,โอกาเนสซอน,294,18,7,unknown,2|8|18|32|32|18|8,-,-,157,[Rn] 7s2 5f14 6d10 7p6"
+        ];
+
+        const getElementData = (sym, category, group) => {
+            const diatoms = ['H', 'N', 'O', 'F', 'Cl', 'Br', 'I'];
+            let naturalState = { formula: sym, desc: "ของแข็ง/อะตอมอิสระ" };
+            if (diatoms.includes(sym)) naturalState = { formula: `${sym}₂`, desc: "โมเลกุลคู่ (Diatomic)" };
+            else if (sym === 'P') naturalState = { formula: `P₄`, desc: "โมเลกุล (White Phosphorus)" };
+            else if (sym === 'S') naturalState = { formula: `S₈`, desc: "วงแหวน (Octasulfur)" };
+            else if (sym === 'C') naturalState = { formula: `C`, desc: "โครงร่างตาข่าย (Diamond/Graphite)" };
+            else if (category === 'noble' || sym === 'Og') naturalState = { formula: sym, desc: "แก๊สอะตอมเดี่ยว (Monatomic)" };
+            else if (category.includes('metal') || category === 'alkali' || category === 'alkaline' || category === 'lanthanide' || category === 'actinide') naturalState = { formula: sym, desc: "โครงผลึกโลหะ (Metallic lattice)" };
+            else if (category === 'unknown') naturalState = { formula: sym, desc: "สังเคราะห์/ไม่พบในธรรมชาติ" };
+
+            let ion = null;
+            if (group === 1 && sym !== 'H') ion = { symbol: `${sym}⁺`, charge: 1, eChange: -1, type: 'cation' };
+            else if (group === 2) ion = { symbol: `${sym}²⁺`, charge: 2, eChange: -2, type: 'cation' };
+            else if (group === 17 && sym !== 'Ts') ion = { symbol: `${sym}⁻`, charge: -1, eChange: 1, type: 'anion' };
+            else if (group === 16 && !['Po', 'Lv'].includes(sym)) ion = { symbol: `${sym}²⁻`, charge: -2, eChange: 2, type: 'anion' };
+            else if (sym === 'Al') ion = { symbol: `Al³⁺`, charge: 3, eChange: -3, type: 'cation' };
+
+            let colors = null;
+            if (sym === 'Cr') colors = "Cr³⁺ (สีเขียว), Cr₂O₇²⁻ (สีส้ม), CrO₄²⁻ (สีเหลือง)";
+            if (sym === 'Mn') colors = "Mn²⁺ (สีชมพูอ่อน), MnO₄⁻ (สีม่วงแดง)";
+            if (sym === 'Fe') colors = "Fe²⁺ (สีเขียวอ่อน), Fe³⁺ (สีเหลือง/น้ำตาล)";
+            if (sym === 'Co') colors = "Co²⁺ (สีชมพู/สีน้ำเงินในกรด)";
+            if (sym === 'Ni') colors = "Ni²⁺ (สีเขียว)";
+            if (sym === 'Cu') colors = "Cu²⁺ (สีฟ้า/น้ำเงิน)";
+
+            return { naturalState, ion, colors };
+        };
+
+        const elements = rawData.map(row => {
+            const [z, sym, nEn, nTh, mass, group, period, cat, shells, en, ie, radius, eConfig] = row.split(',');
+            const extra = getElementData(sym, cat, parseInt(group));
+            return {
+                z: parseInt(z), sym, nameEn: nEn, nameTh: nTh, mass: parseFloat(mass) || mass, 
+                group: parseInt(group), period: parseInt(period), category: cat,
+                shells: shells.split('|').map(Number), 
+                en: parseFloat(en) || null, ie: parseFloat(ie) || null, radius: parseFloat(radius) || null, 
+                eConfig,
+                ...extra
+            };
+        });
+
+        const categoryColors = {
+            "nonmetal": "bg-green-200 text-green-900 border-green-400 hover:bg-green-300",
+            "noble": "bg-purple-200 text-purple-900 border-purple-400 hover:bg-purple-300",
+            "alkali": "bg-red-200 text-red-900 border-red-400 hover:bg-red-300",
+            "alkaline": "bg-orange-200 text-orange-900 border-orange-400 hover:bg-orange-300",
+            "metalloid": "bg-teal-200 text-teal-900 border-teal-400 hover:bg-teal-300",
+            "halogen": "bg-yellow-200 text-yellow-900 border-yellow-400 hover:bg-yellow-300",
+            "transition": "bg-blue-200 text-blue-900 border-blue-400 hover:bg-blue-300",
+            "post-transition": "bg-indigo-200 text-indigo-900 border-indigo-400 hover:bg-indigo-300",
+            "lanthanide": "bg-emerald-200 text-emerald-900 border-emerald-400 hover:bg-emerald-300",
+            "actinide": "bg-fuchsia-200 text-fuchsia-900 border-fuchsia-400 hover:bg-fuchsia-300",
+            "unknown": "bg-gray-200 text-gray-900 border-gray-400 hover:bg-gray-300"
+        };
+
+        const quizQuestions = [
+            { q: "ธาตุใดในคาบที่ 4 ที่มีการจัดเรียงอิเล็กตรอนเป็นข้อยกเว้น โดยลงท้ายด้วย 4s¹ 3d⁵ ?", options: ["Vanadium (V)", "Chromium (Cr)", "Manganese (Mn)", "Iron (Fe)"], answer: 1, exp: "Chromium (Z=24) จัดแบบ [Ar] 4s¹ 3d⁵ เพื่อให้ 3d-orbital บรรจุครึ่ง (Half-filled) ซึ่งทำให้มีความเสถียรมากกว่า" },
+            { q: "เหตุใดพลังงานไอออไนเซชันลำดับที่ 1 (IE1) ของ N จึงสูงกว่า O ?", options: ["เพราะ N ขนาดเล็กกว่า", "เพราะ N มีโปรตอนมากกว่า", "เพราะ e⁻ นอกสุดของ N จัดแบบ Half-filled (2p³) เสถียรมาก", "เพราะ O เป็นอโลหะมากกว่า"], answer: 2, exp: "N จัดแบบ 2p³ (Half-filled เสถียร) ส่วน O เป็น 2p⁴ มีอิเล็กตรอนเข้าคู่ 1 คู่ เกิดแรงผลัก จึงหลุดง่ายกว่า (IE1 ต่ำกว่า)" },
+            { q: "ในการเกิดไอออน Fe²⁺ (Z=26) อิเล็กตรอนถูกดึงออกจากออร์บิทัลใดเป็นลำดับแรก?", options: ["3d", "4s", "3p", "4p"], answer: 1, exp: "เมื่อเกิดไอออนบวกของโลหะแทรนซิชัน จะต้องดึงอิเล็กตรอนออกจากระดับพลังงานชั้นนอกสุด (n มากสุด) ก่อนเสมอ ซึ่งก็คือ 4s (Fe: [Ar] 4s² 3d⁶ -> Fe²⁺: [Ar] 3d⁶)" },
+            { q: "ไอออนหรืออะตอมในข้อใด มีขนาดใหญ่ที่สุด? (Isoelectronic series)", options: ["N³⁻", "O²⁻", "F⁻", "Na⁺"], answer: 0, exp: "ทั้งหมดมีอิเล็กตรอนเท่ากัน (10 e⁻) ขนาดจะขึ้นอยู่กับจำนวนโปรตอน N³⁻ มีโปรตอนน้อยสุด (7p+) จึงดึงดูดอิเล็กตรอนได้น้อยที่สุด ทำให้วงโคจรขยายใหญ่สุด" },
+            { q: "เลขควอนตัม (Quantum Numbers) ของอิเล็กตรอนตัวสุดท้ายของธาตุ Na (Z=11) คือข้อใด?", options: ["n=3, l=0, ml=0, ms=+1/2", "n=3, l=1, ml=0, ms=+1/2", "n=2, l=1, ml=-1, ms=-1/2", "n=3, l=0, ml=1, ms=-1/2"], answer: 0, exp: "Na ลงท้ายด้วย 3s¹ -> n=3 (ระดับพลังงานที่ 3), l=0 (ออร์บิทัล s), ml=0 (มีห้องเดียว), ms=+1/2 (อิเล็กตรอนตัวแรกสปินขึ้น)" },
+            { q: "ตามกฎของฮุนด์ (Hund's Rule) การบรรจุอิเล็กตรอนในออร์บิทัล p จะต้องทำอย่างไร?", options: ["บรรจุให้เต็มทีละห้อง", "บรรจุให้มีสปินเดี่ยวมากที่สุดก่อน (Half-filled)", "บรรจุจากพลังงานต่ำไปสูง", "ห้ามมีเลขควอนตัมเหมือนกัน 4 ตัว"], answer: 1, exp: "กฎของฮุนด์กล่าวว่า การบรรจุ e⁻ ในออร์บิทัลที่มีพลังงานเท่ากัน (Degenerate) จะต้องบรรจุให้เป็นอิเล็กตรอนเดี่ยว (สปินขนานกัน) มากที่สุดก่อน เพื่อลดแรงผลัก" },
+            { q: "ข้อใดอธิบายการเปลี่ยนแปลงรัศมีเมื่อคลอรีน (Cl) กลายเป็นคลอไรด์ไอออน (Cl⁻) ได้ถูกต้อง?", options: ["ขนาดเล็กลง เพราะเสียอิเล็กตรอน", "ขนาดเท่าเดิม", "ขนาดใหญ่ขึ้น เพราะมีแรงผลักระหว่างอิเล็กตรอนเพิ่มขึ้น", "ขนาดใหญ่ขึ้น เพราะจำนวนโปรตอนเพิ่มขึ้น"], answer: 2, exp: "ไอออนลบ (Anion) จะมีขนาดใหญ่กว่าอะตอมเดิมเสมอ เพราะการรับอิเล็กตรอนเข้ามาทำให้เกิด Electron-Electron Repulsion ในวงนอกสุด" },
+            { q: "ธาตุใดต่อไปนี้มีสถานะในธรรมชาติเป็น โมเลกุลอะตอมคู่ (Diatomic molecule) ที่สภาวะปกติ?", options: ["Phosphorus (P)", "Helium (He)", "Carbon (C)", "Iodine (I)"], answer: 3, exp: "หมู่ Halogen (F, Cl, Br, I) รวมถึง H, N, O จะอยู่ในรูปโมเลกุลคู่ (เช่น I₂) ส่วน P มักเป็น P₄, He เป็นอะตอมเดี่ยว และ C เป็นโครงร่างตาข่าย" },
+            { q: "สีของสารประกอบหรือไอออนของธาตุแทรนซิชันมักเกิดจากสาเหตุใด?", options: ["การกระโดดของอิเล็กตรอนระหว่าง s และ p orbital", "การแยกตัวของระดับพลังงาน d-orbital (d-d transition)", "การเกิดพันธะไอออนิกที่แข็งแรง", "การแผ่รังสีของนิวเคลียส"], answer: 1, exp: "สารประกอบแทรนซิชันมีสีเพราะ d-orbital ถูกแยกออกเป็น 2 ระดับพลังงานเมื่อมีลิแกนด์มาจับ อิเล็กตรอนจึงสามารถดูดกลืนแสงและกระโดดข้ามระดับ (d-d transition) ได้" },
+            { q: "แนวโน้มค่าอิเล็กโทรเนกาติวิตี (EN) ในตารางธาตุเป็นอย่างไร?", options: ["เพิ่มขึ้นจากซ้ายไปขวา และเพิ่มขึ้นจากบนลงล่าง", "ลดลงจากซ้ายไปขวา และเพิ่มขึ้นจากบนลงล่าง", "เพิ่มขึ้นจากซ้ายไปขวา และลดลงจากบนลงล่าง", "ลดลงจากซ้ายไปขวา และลดลงจากบนลงล่าง"], answer: 2, exp: "ตามคาบ (ซ้ายไปขวา) ขนาดอะตอมเล็กลง นิวเคลียสดึงดูด e⁻ ได้ดี (EN เพิ่ม) / ตามหมู่ (บนลงล่าง) ขนาดอะตอมใหญ่ขึ้น นิวเคลียสอยู่ไกล (EN ลดลง)" }
+        ];
+
+        // --- COMPONENTS ---
+        const BohrModel = ({ shells, symbol, isIon = false, ionData = null }) => {
+            const realisticRadii = [35, 65, 90, 110, 125, 137, 147];
+            let displayShells = [...shells];
+            let centerSymbol = symbol;
+            let scaleModifier = 1; 
+
+            if (isIon && ionData) {
+                centerSymbol = ionData.symbol;
+                if (ionData.type === 'cation') {
+                    displayShells[displayShells.length - 1] += ionData.eChange;
+                    if (displayShells[displayShells.length - 1] <= 0) displayShells.pop();
+                    scaleModifier = 0.85; 
+                } else {
+                    displayShells[displayShells.length - 1] += ionData.eChange;
+                    scaleModifier = 1.15; 
+                }
+            }
+
+            return (
+                <div className="flex justify-center items-center bg-gray-900 rounded-xl p-4 w-full h-full overflow-hidden relative">
+                    <svg viewBox="-160 -160 320 320" className="w-full h-auto max-h-64 drop-shadow-lg transition-transform duration-500" style={{ transform: `scale(${scaleModifier})` }}>
+                        <circle cx="0" cy="0" r="14" fill="#ef4444" />
+                        <text x="0" y="4" fill="white" fontSize="12" fontWeight="bold" textAnchor="middle">{centerSymbol}</text>
+                        {displayShells.map((count, shellIndex) => {
+                            const r = realisticRadii[shellIndex] || (150 + shellIndex*10); 
+                            const duration = 3 + (shellIndex * 2); 
+                            return (
+                                <g key={`shell-${shellIndex}`}>
+                                    <circle cx="0" cy="0" r={r} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="4 2" />
+                                    <g style={{ animation: `orbit ${duration}s linear infinite` }}>
+                                        {Array.from({ length: count }).map((_, eIndex) => {
+                                            const angle = (eIndex / count) * 360 * (Math.PI / 180);
+                                            const x = r * Math.cos(angle);
+                                            const y = r * Math.sin(angle);
+                                            return <circle key={`e-${shellIndex}-${eIndex}`} cx={x} cy={y} r={3} fill="#06b6d4" className="shadow-cyan-500/50" />
+                                        })}
+                                    </g>
+                                </g>
+                            );
+                        })}
+                    </svg>
+                    {isIon && (
+                        <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-1 rounded">
+                            {ionData.type === 'cation' ? 'เสีย e⁻ ขนาดเล็กลง' : 'รับ e⁻ ขนาดใหญ่ขึ้น'}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const ElectronAnimator = () => {
+            const [selectedZ, setSelectedZ] = useState(8); 
+            const [step, setStep] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+
+            const subshells = [
+                { name: '1s', cap: 2, boxes: 1, energy: 1 }, { name: '2s', cap: 2, boxes: 1, energy: 2 },
+                { name: '2p', cap: 6, boxes: 3, energy: 3 }, { name: '3s', cap: 2, boxes: 1, energy: 4 },
+                { name: '3p', cap: 6, boxes: 3, energy: 5 }, { name: '4s', cap: 2, boxes: 1, energy: 6 },
+                { name: '3d', cap: 10, boxes: 5, energy: 7 }, { name: '4p', cap: 6, boxes: 3, energy: 8 },
+                { name: '5s', cap: 2, boxes: 1, energy: 9 }, { name: '4d', cap: 10, boxes: 5, energy: 10 },
+                { name: '5p', cap: 6, boxes: 3, energy: 11 }, { name: '6s', cap: 2, boxes: 1, energy: 12 },
+                { name: '4f', cap: 14, boxes: 7, energy: 13 }, { name: '5d', cap: 10, boxes: 5, energy: 14 },
+                { name: '6p', cap: 6, boxes: 3, energy: 15 }, { name: '7s', cap: 2, boxes: 1, energy: 16 },
+                { name: '5f', cap: 14, boxes: 7, energy: 17 }, { name: '6d', cap: 10, boxes: 5, energy: 18 },
+                { name: '7p', cap: 6, boxes: 3, energy: 19 }
+            ];
+
+            const buildSequence = (totalE) => {
+                let seq = [];
+                let remain = totalE;
+                let actualDist = [];
+                if (totalE === 24) actualDist = [2, 2, 6, 2, 6, 1, 5, 0]; 
+                else if (totalE === 29) actualDist = [2, 2, 6, 2, 6, 1, 10, 0]; 
+                else {
+                    for (let s of subshells) {
+                        if (remain >= s.cap) { actualDist.push(s.cap); remain -= s.cap; }
+                        else { actualDist.push(remain); remain = 0; }
+                    }
+                }
+                subshells.forEach((ss, idx) => {
+                    let eInThisSubshell = actualDist[idx] || 0;
+                    if (eInThisSubshell === 0) return;
+                    for (let box = 0; box < ss.boxes && eInThisSubshell > 0; box++) {
+                        seq.push({ subshell: ss.name, box: box, spin: 'up', rule: box === 0 ? 'Aufbau' : 'Hund' });
+                        eInThisSubshell--;
+                    }
+                    for (let box = 0; box < ss.boxes && eInThisSubshell > 0; box++) {
+                        seq.push({ subshell: ss.name, box: box, spin: 'down', rule: 'Pauli' });
+                        eInThisSubshell--;
+                    }
+                });
+                return seq;
+            };
+
+            const sequence = useMemo(() => buildSequence(selectedZ), [selectedZ]);
+
+            useEffect(() => {
+                let timer;
+                if (isPlaying && step < sequence.length) {
+                    const speed = sequence.length > 50 ? 50 : 600; 
+                    timer = setTimeout(() => setStep(s => s + 1), speed); 
+                } else if (step >= sequence.length) {
+                    setIsPlaying(false);
+                }
+                return () => clearTimeout(timer);
+            }, [isPlaying, step, sequence]);
+
+            const reset = () => { setStep(0); setIsPlaying(false); };
+            const currentMove = step > 0 ? sequence[step - 1] : null;
+
+            const boxesState = {};
+            for(let i=0; i<step; i++) {
+                const move = sequence[i];
+                const key = `${move.subshell}-${move.box}`;
+                if (!boxesState[key]) boxesState[key] = [];
+                boxesState[key].push(move.spin);
+            }
+
+            return (
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 border-b pb-4">
+                        <div>
+                            <h3 className="font-bold text-xl text-indigo-800">แอนิเมชัน 3 กฎการจัดอิเล็กตรอน</h3>
+                            <p className="text-sm text-gray-500">เลือกธาตุที่ต้องการเพื่อดูทิศทางการบรรจุอิเล็กตรอนตามหลักการ Aufbau</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <select 
+                                value={selectedZ} 
+                                onChange={(e) => { setSelectedZ(parseInt(e.target.value)); reset(); }}
+                                className="border-2 border-indigo-200 rounded-lg px-4 py-2 bg-indigo-50 font-bold outline-none max-w-[200px]"
+                            >
+                                {elements.map(e => <option key={e.z} value={e.z}>{e.z} - {e.sym} ({e.nameTh})</option>)}
+                            </select>
+                            <button onClick={() => { if(step >= sequence.length) reset(); setIsPlaying(!isPlaying); }} className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg flex items-center gap-2">
+                                {isPlaying ? <span className="px-2">หยุดพัก</span> : <><Play className="w-5 h-5"/> {step > 0 ? 'เล่นต่อ' : 'เริ่มบรรจุ'}</>}
+                            </button>
+                            <button onClick={reset} className="bg-gray-200 hover:bg-gray-300 text-gray-700 p-2 rounded-lg"><RotateCcw className="w-5 h-5"/></button>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-8 justify-center min-h-[150px] items-end bg-gray-50 p-6 rounded-xl">
+                        {subshells.map((ss) => {
+                            const isVisible = sequence.findIndex(seq => seq.subshell === ss.name) !== -1 || (step===0 && ss.name==='1s');
+                            if (!isVisible && ss.energy > (currentMove ? subshells.find(s => s.name === currentMove.subshell).energy + 1 : 1)) return null;
+
+                            return (
+                                <div key={ss.name} className="flex flex-col items-center">
+                                    <span className={`text-sm font-bold mb-2 ${currentMove?.subshell === ss.name ? 'text-indigo-600' : 'text-gray-400'}`}>{ss.name}</span>
+                                    <div className="flex gap-1">
+                                        {Array.from({length: ss.boxes}).map((_, boxIdx) => {
+                                            const state = boxesState[`${ss.name}-${boxIdx}`] || [];
+                                            const isJustAdded = currentMove && currentMove.subshell === ss.name && currentMove.box === boxIdx;
+                                            return (
+                                                <div key={boxIdx} className={`w-8 h-8 border-2 flex items-center justify-center bg-white ${isJustAdded ? 'border-indigo-500 shadow-md transform scale-110' : 'border-gray-300'} transition-all`}>
+                                                    <div className="flex gap-0.5">
+                                                        {state.includes('up') && <span className="text-blue-600 text-lg leading-none font-bold">↿</span>}
+                                                        {state.includes('down') && <span className="text-red-500 text-lg leading-none font-bold">⇂</span>}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div className="mt-6">
+                        <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg min-h-[80px]">
+                            <h4 className="font-bold flex items-center gap-2 text-blue-800">
+                                <Info className="w-5 h-5"/> กฎที่กำลังใช้งาน: 
+                                <span className="text-xl">{currentMove?.rule || 'รอการเริ่มต้น'}</span>
+                            </h4>
+                            <p className="text-blue-700 mt-1">
+                                {currentMove?.rule === 'Aufbau' && "หลักของเอาฟ์บาว (Aufbau Principle): บรรจุอิเล็กตรอนในระดับพลังงานต่ำสุดที่ว่างอยู่ก่อน"}
+                                {currentMove?.rule === 'Hund' && "กฎของฮุนด์ (Hund's Rule): ในออร์บิทัลระดับพลังงานเท่ากัน ให้บรรจุอิเล็กตรอนเดี่ยว (สปินขึ้น) ให้เต็มทุกห้องก่อน (Half-filled)"}
+                                {currentMove?.rule === 'Pauli' && "หลักการกีดกันของเพาลี (Pauli Exclusion): เมื่อเข้าคู่ในห้องเดียวกัน อิเล็กตรอนต้องมีสปินตรงข้ามกัน (หัวกลับ)"}
+                                {!currentMove && "กดปุ่ม 'เริ่มบรรจุ' เพื่อดูการเคลื่อนที่ของอิเล็กตรอนตามกฎทั้ง 3 ข้อ"}
+                                {selectedZ > 36 && <span className="block mt-2 text-red-500 text-xs font-bold">*สำหรับธาตุ Z {'>'} 36 แอนิเมชันนี้จะบรรจุตามหลักการพื้นฐาน Aufbau โดยละเว้นข้อยกเว้นบางประการที่พบในธาตุแทรนซิชัน/แลนทาไนด์</span>}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const TrendsBarChart = ({ property }) => {
+            const [viewMode, setViewMode] = useState('period'); 
+            const [selectedValue, setSelectedValue] = useState(2); 
+
+            const propNames = { en: 'อิเล็กโทรเนกาติวิตี (EN)', ie: 'IE ลำดับที่ 1 (kJ/mol)', radius: 'รัศมีอะตอม (pm)' };
+            const propColors = { en: '#8b5cf6', ie: '#ec4899', radius: '#10b981' }; 
+
+            const chartData = elements.filter(e => {
+                if (e[property] === null || isNaN(e[property])) return false;
+                if (viewMode === 'period') return e.period === selectedValue && e.group <= 18; 
+                return e.group === selectedValue;
+            });
+
+            const maxVal = Math.max(...chartData.map(e => e[property] || 0), 1);
+            
+            return (
+                <div className="w-full bg-white rounded-xl shadow p-4 border border-gray-100">
+                    <div className="flex flex-wrap gap-4 mb-6 items-center justify-between border-b pb-4">
+                        <div><h3 className="font-bold text-lg text-gray-800">เปรียบเทียบ {propNames[property]}</h3></div>
+                        <div className="flex gap-2">
+                            <select value={viewMode} onChange={(e) => { setViewMode(e.target.value); setSelectedValue(e.target.value === 'period' ? 2 : 1); }} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm">
+                                <option value="period">ดูตามคาบ (Period)</option>
+                                <option value="group">ดูตามหมู่ (Group)</option>
+                            </select>
+                            <select value={selectedValue} onChange={(e) => setSelectedValue(parseInt(e.target.value))} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-gray-50">
+                                {viewMode === 'period' 
+                                    ? [1,2,3,4,5,6,7].map(p => <option key={p} value={p}>คาบที่ {p}</option>) 
+                                    : [1,2,13,14,15,16,17,18].map(g => <option key={g} value={g}>หมู่ {g} ({g<=2?g+'A':(g-10)+'A'})</option>)
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    {chartData.length === 0 ? (
+                        <div className="text-center py-10 text-gray-400">ไม่มีข้อมูลที่สมบูรณ์สำหรับเงื่อนไขนี้</div>
+                    ) : (
+                        <div className="flex items-end justify-around h-64 mt-4 px-2 md:px-8 gap-2">
+                            {chartData.map(e => {
+                                const heightPercent = (e[property] / maxVal) * 100;
+                                return (
+                                    <div key={e.z} className="flex flex-col items-center justify-end h-full w-full group relative">
+                                        <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 bg-gray-800 text-white text-xs py-1 px-2 rounded whitespace-nowrap z-10">
+                                            {e[property]}
+                                        </div>
+                                        <div className="w-full max-w-[40px] rounded-t-sm transition-all duration-500" style={{ height: `${heightPercent}%`, backgroundColor: propColors[property] }}></div>
+                                        <div className="mt-2 text-center">
+                                            <span className="block font-bold text-sm text-gray-700">{e.sym}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const QuizModule = () => {
+            const [currentQ, setCurrentQ] = useState(0);
+            const [selectedOpt, setSelectedOpt] = useState(null);
+            const [showExp, setShowExp] = useState(false);
+            const [score, setScore] = useState(0);
+
+            const q = quizQuestions[currentQ];
+
+            const handleAnswer = (idx) => {
+                if (showExp) return;
+                setSelectedOpt(idx);
+                setShowExp(true);
+                if (idx === q.answer) setScore(s => s + 1);
+            };
+
+            const nextQ = () => {
+                setSelectedOpt(null);
+                setShowExp(false);
+                setCurrentQ(c => c + 1);
+            };
+
+            if (currentQ >= quizQuestions.length) {
+                return (
+                    <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 text-center">
+                        <h3 className="text-2xl font-bold mb-2">จบแบบทดสอบ</h3>
+                        <p className="text-gray-600 mb-6">คะแนนของคุณ: <span className="text-indigo-600 font-bold text-xl">{score} / {quizQuestions.length}</span></p>
+                        <button onClick={() => {setCurrentQ(0); setScore(0); setShowExp(false);}} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-indigo-700">ฝึกฝนใหม่อีกครั้ง</button>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-lg flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-indigo-600"/> ข้อสอบวิเคราะห์ สอวน.</h3>
+                        <span className="text-sm font-bold text-gray-500">ข้อ {currentQ + 1} / {quizQuestions.length}</span>
+                    </div>
+                    
+                    <p className="text-gray-800 font-medium mb-4 text-lg leading-relaxed">{q.q}</p>
+                    
+                    <div className="space-y-2">
+                        {q.options.map((opt, idx) => {
+                            let btnClass = "w-full text-left p-3 rounded-lg border transition-colors ";
+                            if (!showExp) btnClass += "hover:bg-indigo-50 border-gray-200";
+                            else {
+                                if (idx === q.answer) btnClass += "bg-green-100 border-green-500 font-bold";
+                                else if (idx === selectedOpt) btnClass += "bg-red-100 border-red-500";
+                                else btnClass += "bg-gray-50 border-gray-200 opacity-50";
+                            }
+                            return <button key={idx} disabled={showExp} onClick={() => handleAnswer(idx)} className={btnClass}>{opt}</button>;
+                        })}
+                    </div>
+
+                    {showExp && (
+                        <div className={`mt-4 p-4 rounded-lg border ${selectedOpt === q.answer ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                            <p className="font-bold mb-1">{selectedOpt === q.answer ? '✅ ถูกต้อง เยี่ยมมาก!' : '❌ ยังไม่ถูกต้อง'}</p>
+                            <p className="text-sm mt-2 font-medium">คำอธิบาย:</p>
+                            <p className="text-sm">{q.exp}</p>
+                            <div className="mt-4 flex justify-end">
+                                <button onClick={nextQ} className="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-900">
+                                    {currentQ === quizQuestions.length - 1 ? 'ดูคะแนนรวม' : 'ข้อต่อไป ➔'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [selectedElement, setSelectedElement] = useState(null);
+            const [activeTab, setActiveTab] = useState('table'); 
+            const [trendProp, setTrendProp] = useState('ie');
+            const [showIonMode, setShowIonMode] = useState(false); 
+
+            useEffect(() => { setShowIonMode(false); }, [selectedElement]);
+
+            const renderPeriodicTable = () => (
+                <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
+                    <div className="grid gap-1 min-w-[900px] w-full" style={{ gridTemplateColumns: 'repeat(18, minmax(0, 1fr))', gridTemplateRows: 'repeat(11, auto)' }}>
+                        {Array.from({length: 18}).map((_, i) => (
+                            <div key={`g${i+1}`} className="text-center text-[10px] md:text-xs font-bold text-gray-400 py-1" style={{ gridRow: 1, gridColumn: i + 1 }}>{i+1}</div>
+                        ))}
+                        
+                        <div className="flex items-center justify-center text-[10px] font-bold text-gray-400 border border-dashed rounded-md" style={{ gridRow: 7, gridColumn: 3 }}>57-71</div>
+                        <div className="flex items-center justify-center text-[10px] font-bold text-gray-400 border border-dashed rounded-md" style={{ gridRow: 8, gridColumn: 3 }}>89-103</div>
+
+                        {elements.map((el) => {
+                            let gridRow, gridColumn;
+                            if (el.z >= 57 && el.z <= 71) { gridRow = 10; gridColumn = el.z - 57 + 4; } 
+                            else if (el.z >= 89 && el.z <= 103) { gridRow = 11; gridColumn = el.z - 89 + 4; } 
+                            else { gridRow = el.period + 1; gridColumn = el.group; }
+
+                            return (
+                                <div 
+                                    key={el.z} onClick={() => setSelectedElement(el)}
+                                    className={`relative cursor-pointer border rounded-md p-0.5 md:p-1 flex flex-col items-center justify-center aspect-square transition-transform hover:scale-110 hover:z-10 shadow-sm ${categoryColors[el.category] || 'bg-gray-100'}`}
+                                    style={{ gridColumn, gridRow }}
+                                >
+                                    <span className="absolute top-0.5 left-1 text-[7px] md:text-[9px] font-semibold opacity-70">{el.z}</span>
+                                    <span className="text-sm md:text-lg font-bold mt-1.5 md:mt-2">{el.sym}</span>
+                                    <span className="text-[7px] md:text-[8px] truncate w-full text-center opacity-80">{el.mass.toString().substring(0,5)}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    
+                    <div className="mt-6 flex flex-wrap gap-2 justify-center text-[10px] md:text-xs">
+                        {Object.entries({
+                            'Alkali': categoryColors.alkali, 'Alkaline': categoryColors.alkaline, 'Transition': categoryColors.transition,
+                            'Post-Transition': categoryColors['post-transition'], 'Metalloid': categoryColors.metalloid, 'Nonmetal': categoryColors.nonmetal,
+                            'Halogen': categoryColors.halogen, 'Noble Gas': categoryColors.noble, 'Lanthanide': categoryColors.lanthanide,
+                            'Actinide': categoryColors.actinide, 'Unknown': categoryColors.unknown
+                        }).map(([name, cls]) => (
+                            <div key={name} className={`px-2 py-1 rounded border ${cls}`}>{name}</div>
+                        ))}
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="min-h-screen flex flex-col">
+                    <div className="p-4 md:p-8 flex-grow">
+                        <div className="max-w-6xl mx-auto mb-8 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-indigo-600 p-3 rounded-xl"><Atom className="text-white w-8 h-8" /></div>
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-900">POSN Chemistry Pro</h1>
+                                    <p className="text-gray-500 text-sm">เครื่องมืออัจฉริยะสำหรับเตรียมสอบ สอวน. เคมี</p>
+                                </div>
+                            </div>
+                            
+                            <div className="flex bg-gray-100 p-1 rounded-lg w-full md:w-auto overflow-x-auto">
+                                <button onClick={()=>setActiveTab('table')} className={`whitespace-nowrap flex-1 px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center ${activeTab==='table'?'bg-white shadow text-indigo-700':'text-gray-500 hover:bg-gray-200'}`}><LayoutGrid className="w-4 h-4"/> ตารางธาตุ</button>
+                                <button onClick={()=>setActiveTab('config')} className={`whitespace-nowrap flex-1 px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center ${activeTab==='config'?'bg-white shadow text-indigo-700':'text-gray-500 hover:bg-gray-200'}`}><Play className="w-4 h-4"/> กฎการจัดอิเล็กตรอน</button>
+                                <button onClick={()=>setActiveTab('trends')} className={`whitespace-nowrap flex-1 px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center ${activeTab==='trends'?'bg-white shadow text-indigo-700':'text-gray-500 hover:bg-gray-200'}`}><Activity className="w-4 h-4"/> แนวโน้ม</button>
+                                <button onClick={()=>setActiveTab('quiz')} className={`whitespace-nowrap flex-1 px-4 py-2 rounded-md text-sm font-medium flex gap-2 items-center ${activeTab==='quiz'?'bg-white shadow text-indigo-700':'text-gray-500 hover:bg-gray-200'}`}><BookOpen className="w-4 h-4"/> แบบฝึกหัด</button>
+                            </div>
+                        </div>
+
+                        <div className="max-w-[1200px] mx-auto">
+                            {activeTab === 'table' && (
+                                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-6 relative">
+                                    <div className="flex items-center justify-between text-sm mb-4">
+                                        <div className="bg-blue-50 text-blue-800 px-3 py-1.5 rounded-lg md:hidden flex gap-2 items-center">
+                                            <ChevronLeft className="w-4 h-4"/> เลื่อนซ้าย-ขวา <ChevronRight className="w-4 h-4"/>
+                                        </div>
+                                        <p className="text-gray-400 text-xs text-right w-full">แสดงธาตุครบทั้ง 118 ตัว (Z=1 ถึง 118)</p>
+                                    </div>
+                                    {renderPeriodicTable()}
+                                </div>
+                            )}
+
+                            {activeTab === 'config' && <div className="max-w-6xl mx-auto"><ElectronAnimator /></div>}
+                            
+                            {activeTab === 'trends' && (
+                                <div className="flex flex-col gap-6 max-w-6xl mx-auto">
+                                    <div className="flex flex-wrap gap-2 bg-white p-4 rounded-xl shadow-sm border border-gray-100 items-center">
+                                        <span className="font-bold text-gray-700 mr-2">เลือกสมบัติ: </span>
+                                        <button onClick={()=>setTrendProp('ie')} className={`px-4 py-1.5 rounded-lg font-medium text-sm transition-colors ${trendProp==='ie'?'bg-pink-500 text-white':'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>IE1</button>
+                                        <button onClick={()=>setTrendProp('en')} className={`px-4 py-1.5 rounded-lg font-medium text-sm transition-colors ${trendProp==='en'?'bg-purple-500 text-white':'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>EN</button>
+                                        <button onClick={()=>setTrendProp('radius')} className={`px-4 py-1.5 rounded-lg font-medium text-sm transition-colors ${trendProp==='radius'?'bg-emerald-500 text-white':'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>Atomic Radius</button>
+                                    </div>
+                                    <TrendsBarChart property={trendProp} />
+                                </div>
+                            )}
+
+                            {activeTab === 'quiz' && <div className="max-w-2xl mx-auto"><QuizModule /></div>}
+                        </div>
+                    </div>
+
+                    <footer className="bg-white border-t border-gray-200 py-6 mt-12">
+                        <div className="max-w-6xl mx-auto px-4 text-center">
+                            <p className="text-gray-800 font-bold mb-1">POSN Chemistry Pro</p>
+                            <p className="text-gray-500 text-sm">Developed by <span className="text-indigo-600 font-semibold">Korawit San-E.</span></p>
+                        </div>
+                    </footer>
+
+                    {selectedElement && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedElement(null)}>
+                            <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                                <div className={`p-4 flex justify-between items-center text-white ${categoryColors[selectedElement.category]?.split(' ')[0] || 'bg-gray-500'}`}>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-4xl font-black">{selectedElement.sym}</span>
+                                        <div>
+                                            <h2 className="text-xl font-bold">{selectedElement.nameEn}</h2>
+                                            <p className="opacity-80 text-sm">{selectedElement.nameTh} • เลขอะตอม: {selectedElement.z}</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setSelectedElement(null)} className="p-2 hover:bg-black/20 rounded-full transition-colors"><X/></button>
+                                </div>
+
+                                <div className="p-6 overflow-y-auto custom-scrollbar">
+                                    <div className="grid md:grid-cols-2 gap-6">
+                                        <div className="space-y-4">
+                                            <div>
+                                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">สถานะในธรรมชาติ</h3>
+                                                <div className="bg-indigo-50 border border-indigo-100 p-3 rounded-lg flex items-center gap-3">
+                                                    <span className="text-2xl font-bold text-indigo-700">{selectedElement.naturalState.formula}</span>
+                                                    <span className="text-sm text-indigo-900">{selectedElement.naturalState.desc}</span>
+                                                </div>
+                                            </div>
+
+                                            {selectedElement.colors && (
+                                                <div>
+                                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">สีของไอออนที่พบบ่อย</h3>
+                                                    <div className="bg-pink-50 border border-pink-100 p-2 rounded-lg text-sm font-medium text-pink-800">
+                                                        {selectedElement.colors}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="bg-gray-50 p-2 rounded border">
+                                                    <span className="text-[10px] text-gray-500 block uppercase">มวลอะตอม</span>
+                                                    <span className="font-bold">{selectedElement.mass}</span>
+                                                </div>
+                                                <div className="bg-gray-50 p-2 rounded border">
+                                                    <span className="text-[10px] text-gray-500 block uppercase">EN</span>
+                                                    <span className="font-bold">{selectedElement.en || '-'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-col relative h-56 md:h-auto">
+                                            {selectedElement.ion && (
+                                                <div className="absolute top-2 left-2 z-10 bg-gray-800/80 p-1 rounded-lg backdrop-blur flex gap-1">
+                                                    <button onClick={()=>setShowIonMode(false)} className={`text-xs px-2 py-1 rounded font-bold ${!showIonMode ? 'bg-indigo-500 text-white' : 'text-gray-300 hover:text-white'}`}>อะตอม</button>
+                                                    <button onClick={()=>setShowIonMode(true)} className={`text-xs px-2 py-1 rounded font-bold ${showIonMode ? 'bg-indigo-500 text-white' : 'text-gray-300 hover:text-white'}`}>ไอออน</button>
+                                                </div>
+                                            )}
+                                            <BohrModel shells={selectedElement.shells} symbol={selectedElement.sym} isIon={showIonMode} ionData={selectedElement.ion} />
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-6 pt-6 border-t border-gray-100">
+                                        <h3 className="font-bold text-lg mb-1">การจัดเรียงอิเล็กตรอน (Ground State)</h3>
+                                        <p className="text-sm md:text-lg font-mono text-indigo-700 bg-indigo-50 inline-block px-3 py-1 rounded border border-indigo-100 mb-2 whitespace-pre-wrap">
+                                            {selectedElement.eConfig}
+                                        </p>
+                                        {selectedElement.sym === 'Cr' || selectedElement.sym === 'Cu' ? (
+                                            <p className="text-xs text-red-500 font-bold mb-4">*ข้อยกเว้น: บรรจุแบบ Half-filled/Full-filled เพื่อความเสถียร</p>
+                                        ) : <div className="mb-4"></div>}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
